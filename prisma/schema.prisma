@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE TABLES
+// ============================================
+
+model Ticker {
+  symbol                String   @id
+  name                  String?
+  enabled               Boolean  @default(true)
+  defenseClassification String   @default("NON_DEFENSE") // NON_DEFENSE, DEFENSE_SECONDARY, DEFENSE_PRIMARY
+  manualOverride        Boolean  @default(false)
+  tags                  String[] @default([])
+  screenPassed          Boolean  @default(false)
+  lastScreenedAt        DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  bars     DailyBar[]
+  features Feature[]
+  scores   Score[]
+  news     NewsItem[]
+  events   Event[]
+}
+
+model DailyBar {
+  symbol   String
+  date     DateTime
+  open     Float
+  high     Float
+  low      Float
+  close    Float
+  adjClose Float
+  volume   BigInt
+
+  ticker Ticker @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+
+  @@id([symbol, date])
+  @@index([date])
+}
+
+model Feature {
+  symbol String
+  date   DateTime
+
+  // Technical indicators
+  sma20  Float?
+  sma50  Float?
+  sma200 Float?
+  rsi14  Float?
+  atr14  Float?
+
+  // Relative strength
+  rsVsSpy Float? // Percentile rank vs SPY
+
+  // Semantic features
+  newsSentiment7d    Float?
+  newsSentiment30d   Float?
+  tailRiskScore14d   Float?
+  catalystMomentum   Float?
+  earningsWithin5d   Boolean @default(false)
+  earningsWithin10d  Boolean @default(false)
+
+  ticker Ticker @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+
+  @@id([symbol, date])
+  @@index([date])
+}
+
+model Score {
+  symbol         String
+  asOfDate       DateTime
+  swingScore     Float
+  projectionJson Json     // Projection type
+  explainJson    Json     // ScoreExplain type
+
+  ticker Ticker @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+
+  @@id([symbol, asOfDate])
+  @@index([asOfDate])
+  @@index([swingScore])
+}
+
+// ============================================
+// PORTFOLIO + TAX TABLES
+// ============================================
+
+model PortfolioState {
+  id            Int       @id @default(1) // Singleton
+  currentSymbol String?
+  entryDate     DateTime?
+  entryPrice    Float?
+  shares        Float?
+  updatedAt     DateTime  @updatedAt
+}
+
+model TradeHistory {
+  id          Int       @id @default(autoincrement())
+  symbol      String
+  action      String    // BUY, SELL
+  date        DateTime
+  price       Float
+  shares      Float
+  holdingDays Int?      // For sells
+  gainLoss    Float?    // For sells (dollar amount)
+  gainLossPct Float?    // For sells (percentage)
+  isLongTerm  Boolean?  // For sells (held >= 365 days)
+  createdAt   DateTime  @default(now())
+
+  @@index([symbol])
+  @@index([date])
+}
+
+model Signal {
+  asOfDate             DateTime @id
+  currentSymbol        String
+  sellSignalLevel      String   // NONE, WATCH, SELL, STRONG_SELL
+  rotateRecommendation String   // HOLD, ROTATE
+  rotateToSymbol       String?
+  explainJson          Json     // { asymmetry, upsideRemainingPct, downsideTailPct, reasons[] }
+  taxImpactJson        Json?    // TaxImpact type
+  createdAt            DateTime @default(now())
+}
+
+// ============================================
+// SOFT DATA TABLES
+// ============================================
+
+model NewsItem {
+  id          String   @id @default(cuid())
+  symbol      String
+  publishedAt DateTime
+  source      String
+  title       String
+  url         String?
+  summary     String?
+  contentHash String   @unique // For deduplication
+  rawJson     Json?
+  createdAt   DateTime @default(now())
+
+  ticker Ticker     @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+  label  NewsLabel?
+
+  @@index([symbol])
+  @@index([publishedAt])
+}
+
+model NewsLabel {
+  newsId     String   @id
+  tags       String[] @default([])
+  direction  String?  // POSITIVE, NEGATIVE, NEUTRAL
+  severity   Int      @default(0) // 0-3
+  confidence Float    @default(0)
+  labeledAt  DateTime @default(now())
+  modelUsed  String?  // "heuristic" or "gpt-4o-mini"
+
+  news NewsItem @relation(fields: [newsId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  symbol    String
+  eventDate DateTime
+  eventType String   // EARNINGS, DIVIDEND, SPLIT
+  rawJson   Json?
+  createdAt DateTime @default(now())
+
+  ticker Ticker @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+
+  @@unique([symbol, eventDate, eventType])
+  @@index([eventDate])
+}
+
+// ============================================
+// SYSTEM TABLES
+// ============================================
+
+model JobRun {
+  id          String    @id @default(cuid())
+  runType     String    // DAILY, MANUAL
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  status      String    // RUNNING, SUCCESS, FAILED
+  summaryJson Json?
+  errorJson   Json?
+}
+
+model BacktestRun {
+  id          String   @id @default(cuid())
+  startDate   DateTime
+  endDate     DateTime
+  configJson  Json     // Weights and thresholds tested
+  resultsJson Json     // Performance metrics
+  createdAt   DateTime @default(now())
+}

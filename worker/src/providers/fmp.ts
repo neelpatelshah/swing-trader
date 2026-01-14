@@ -1,6 +1,8 @@
 import pLimit from "p-limit";
 
-const FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+// FMP migrated to /stable/ endpoints in 2025
+const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
+const FMP_V3_URL = "https://financialmodelingprep.com/api/v3"; // For endpoints not yet migrated
 const limit = pLimit(10); // FMP Starter: 300 calls/min
 
 // ============================================
@@ -82,7 +84,9 @@ export async function fetchEODBars(
   return limit(async () => {
     const apiKey = getApiKey();
 
-    const url = new URL(`${FMP_BASE_URL}/historical-price-full/${symbol}`);
+    // New stable endpoint: /stable/historical-price-eod/full
+    const url = new URL(`${FMP_BASE_URL}/historical-price-eod/full`);
+    url.searchParams.set("symbol", symbol);
     url.searchParams.set("apikey", apiKey);
     if (from) url.searchParams.set("from", from);
     if (to) url.searchParams.set("to", to);
@@ -93,9 +97,36 @@ export async function fetchEODBars(
       throw new Error(`FMP API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
-    // FMP returns { symbol, historical: [...] }
-    return (data.historical || []) as FMPBar[];
+    // New format returns flat array, need to map to FMPBar format
+    const data = (await response.json()) as Array<{
+      symbol: string;
+      date: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+      change: number;
+      changePercent: number;
+      vwap: number;
+    }>;
+
+    // Map to FMPBar format (adding missing fields with defaults)
+    return data.map((bar) => ({
+      date: bar.date,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      adjClose: bar.close, // Stable API doesn't return adjClose separately
+      volume: bar.volume,
+      unadjustedVolume: bar.volume,
+      change: bar.change,
+      changePercent: bar.changePercent,
+      vwap: bar.vwap,
+      label: bar.date,
+      changeOverTime: 0,
+    }));
   });
 }
 
@@ -308,7 +339,9 @@ export async function fetchQuotes(symbols: string[]): Promise<FMPQuote[]> {
   return limit(async () => {
     const apiKey = getApiKey();
 
-    const url = new URL(`${FMP_BASE_URL}/quote/${symbols.join(",")}`);
+    // New stable endpoint
+    const url = new URL(`${FMP_BASE_URL}/quote`);
+    url.searchParams.set("symbol", symbols.join(","));
     url.searchParams.set("apikey", apiKey);
 
     const response = await fetch(url.toString());
@@ -317,6 +350,47 @@ export async function fetchQuotes(symbols: string[]): Promise<FMPQuote[]> {
       throw new Error(`FMP API error: ${response.status} ${response.statusText}`);
     }
 
-    return response.json() as Promise<FMPQuote[]>;
+    // Map response to FMPQuote format (field name differences)
+    const data = (await response.json()) as Array<{
+      symbol: string;
+      name: string;
+      price: number;
+      changePercentage: number;
+      change: number;
+      dayLow: number;
+      dayHigh: number;
+      yearHigh: number;
+      yearLow: number;
+      marketCap: number;
+      priceAvg50: number;
+      priceAvg200: number;
+      volume: number;
+      avgVolume?: number;
+      exchange: string;
+      open: number;
+      previousClose: number;
+      timestamp: number;
+    }>;
+
+    return data.map((q) => ({
+      symbol: q.symbol,
+      name: q.name,
+      price: q.price,
+      changesPercentage: q.changePercentage,
+      change: q.change,
+      dayLow: q.dayLow,
+      dayHigh: q.dayHigh,
+      yearHigh: q.yearHigh,
+      yearLow: q.yearLow,
+      marketCap: q.marketCap,
+      priceAvg50: q.priceAvg50,
+      priceAvg200: q.priceAvg200,
+      volume: q.volume,
+      avgVolume: q.avgVolume ?? q.volume,
+      exchange: q.exchange,
+      open: q.open,
+      previousClose: q.previousClose,
+      timestamp: q.timestamp,
+    }));
   });
 }

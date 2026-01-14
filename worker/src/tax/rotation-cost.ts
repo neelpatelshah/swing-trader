@@ -84,3 +84,48 @@ export function formatTaxImpact(impact: TaxImpact): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Determine if we should wait for long-term capital gains status.
+ *
+ * Returns true if:
+ * 1. Position is short-term with meaningful gains
+ * 2. Close to long-term status (within 60 days)
+ * 3. Best candidate edge doesn't exceed tax savings threshold
+ *
+ * @param impact - Current tax impact of the position
+ * @param bestCandidateEdge - Expected edge (%) of the best rotation candidate
+ */
+export function shouldWaitForLongTerm(
+  impact: TaxImpact,
+  bestCandidateEdge: number
+): boolean {
+  // Already long-term, no need to wait
+  if (impact.isLongTerm) {
+    return false;
+  }
+
+  // No gains, no tax benefit to waiting
+  if (impact.estimatedGainPct <= 0) {
+    return false;
+  }
+
+  // Calculate potential tax savings from waiting
+  const potentialSavings =
+    impact.estimatedGainPct * (SHORT_TERM_TAX_RATE - LONG_TERM_TAX_RATE);
+
+  // If very close to long-term (within 30 days), use a higher threshold
+  if (impact.daysToLongTerm <= 30) {
+    // Wait unless candidate edge is significantly better than tax savings
+    return bestCandidateEdge < potentialSavings * 1.5 + TRANSACTION_BUFFER;
+  }
+
+  // If moderately close (30-60 days), use a moderate threshold
+  if (impact.daysToLongTerm <= 60) {
+    // Wait if candidate edge doesn't exceed 2x the tax savings
+    return bestCandidateEdge < potentialSavings * 2.0 + TRANSACTION_BUFFER;
+  }
+
+  // More than 60 days away - don't factor in long-term timing
+  return false;
+}

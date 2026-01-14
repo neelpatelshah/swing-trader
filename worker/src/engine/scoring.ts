@@ -291,3 +291,65 @@ export async function persistScore(
     },
   });
 }
+
+export async function scoreUniverse(
+  symbols: string[],
+  asOfDate: Date,
+  weights: ScoringWeights = DEFAULT_WEIGHTS
+): Promise<{
+  scored: number;
+  errors: string[];
+  topScores: { symbol: string; score: number }[];
+}> {
+  const errors: string[] = [];
+  const scores: { symbol: string; score: number }[] = [];
+
+  console.log(`Scoring ${symbols.length} candidates for ${asOfDate.toISOString().split("T")[0]}`);
+
+  for (const symbol of symbols) {
+    try {
+      const result = await scoreCandidate(symbol, asOfDate, weights);
+      await persistScore(symbol, asOfDate, result);
+      scores.push({ symbol, score: result.swingScore });
+    } catch (error) {
+      errors.push(`${symbol}: ${String(error)}`);
+    }
+  }
+
+  // Sort by score descending
+  scores.sort((a, b) => b.score - a.score);
+
+  console.log(`Scored: ${scores.length}/${symbols.length}`);
+  if (scores.length > 0) {
+    console.log(`Top 5:`);
+    scores.slice(0, 5).forEach((s, i) => {
+      console.log(`  ${i + 1}. ${s.symbol}: ${s.score.toFixed(1)}`);
+    });
+  }
+
+  return {
+    scored: scores.length,
+    errors,
+    topScores: scores.slice(0, 10),
+  };
+}
+
+export async function getTopScores(
+  asOfDate: Date,
+  limit = 50
+): Promise<{ symbol: string; swingScore: number; projection: unknown; explain: unknown }[]> {
+  const scores = await prisma.score.findMany({
+    where: { asOfDate },
+    orderBy: { swingScore: "desc" },
+    take: limit,
+  });
+
+  return scores.map((s) => ({
+    symbol: s.symbol,
+    swingScore: s.swingScore,
+    projection: s.projectionJson,
+    explain: s.explainJson,
+  }));
+}
+
+export { DEFAULT_WEIGHTS, type ScoringWeights, type ScoreResult };

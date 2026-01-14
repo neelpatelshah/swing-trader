@@ -2,23 +2,19 @@
   "name": "swing-trader",
   "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "app",
-    "worker",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "npm run dev --workspace=app",
-    "dev:worker": "npm run dev --workspace=worker",
-    "build": "npm run build --workspace=app && npm run build --workspace=worker",
-    "build:app": "npm run build --workspace=app",
-    "build:worker": "npm run build --workspace=worker",
+    "dev": "pnpm --filter @swing-trader/app dev",
+    "dev:worker": "pnpm --filter @swing-trader/worker dev",
+    "build": "pnpm --filter @swing-trader/app build && pnpm --filter @swing-trader/worker build",
+    "build:app": "pnpm --filter @swing-trader/app build",
+    "build:worker": "pnpm --filter @swing-trader/worker build",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

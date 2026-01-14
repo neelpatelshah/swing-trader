@@ -161,6 +161,17 @@ export async function persistSignal(
     taxImpact: TaxImpact;
   }
 ): Promise<void> {
+  // Convert TaxImpact to plain object for JSON storage
+  const taxImpactData = {
+    holdingDays: rotation.taxImpact.holdingDays,
+    isLongTerm: rotation.taxImpact.isLongTerm,
+    estimatedGainPct: rotation.taxImpact.estimatedGainPct,
+    estimatedTaxRate: rotation.taxImpact.estimatedTaxRate,
+    taxDragPct: rotation.taxImpact.taxDragPct,
+    daysToLongTerm: rotation.taxImpact.daysToLongTerm,
+    requiredEdgeToRotate: rotation.taxImpact.requiredEdgeToRotate,
+  };
+
   await prisma.signal.upsert({
     where: { asOfDate },
     update: {
@@ -174,7 +185,7 @@ export async function persistSignal(
         downsideTailPct: sellSignal.downsideTailPct,
         reasons: [...sellSignal.reasons, ...rotation.reasons],
       },
-      taxImpactJson: rotation.taxImpact,
+      taxImpactJson: taxImpactData,
     },
     create: {
       asOfDate,
@@ -188,7 +199,7 @@ export async function persistSignal(
         downsideTailPct: sellSignal.downsideTailPct,
         reasons: [...sellSignal.reasons, ...rotation.reasons],
       },
-      taxImpactJson: rotation.taxImpact,
+      taxImpactJson: taxImpactData,
     },
   });
 }

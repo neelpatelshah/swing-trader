@@ -78,3 +78,50 @@ export async function excludeDefenseTicker(symbol: string): Promise<void> {
     },
   });
 }
+
+export async function seedInitialUniverse(
+  symbols: string[],
+  classification: "NON_DEFENSE" | "DEFENSE_SECONDARY" = "NON_DEFENSE"
+): Promise<{ added: number; skipped: number }> {
+  let added = 0;
+  let skipped = 0;
+
+  for (const symbol of symbols) {
+    const existing = await prisma.ticker.findUnique({
+      where: { symbol },
+      select: { defenseClassification: true },
+    });
+
+    // Skip if already marked as DEFENSE_PRIMARY (manually excluded)
+    if (existing?.defenseClassification === "DEFENSE_PRIMARY") {
+      console.log(`Skipping ${symbol} - marked as DEFENSE_PRIMARY`);
+      skipped++;
+      continue;
+    }
+
+    await prisma.ticker.upsert({
+      where: { symbol },
+      update: {
+        enabled: true,
+        defenseClassification: existing?.defenseClassification ?? classification,
+      },
+      create: {
+        symbol,
+        enabled: true,
+        defenseClassification: classification,
+      },
+    });
+    added++;
+  }
+
+  console.log(`Seeded universe: ${added} added, ${skipped} skipped`);
+  return { added, skipped };
+}
+
+export async function getFullUniverse(): Promise<string[]> {
+  const tickers = await prisma.ticker.findMany({
+    where: { enabled: true },
+    select: { symbol: true },
+  });
+  return tickers.map((t) => t.symbol);
+}

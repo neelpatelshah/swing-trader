@@ -7,7 +7,7 @@ Personal swing-trading decision engine. See [SPEC.md](./SPEC.md) for full detail
 ### 1. Install dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2. Set up environment
@@ -20,18 +20,18 @@ cp .env.example .env
 ### 3. Set up database
 
 ```bash
-npx prisma generate
-npx prisma db push
+pnpm db:generate
+pnpm db:push
 ```
 
 ### 4. Run locally
 
 ```bash
 # Frontend (Vercel/Next.js)
-npm run dev
+pnpm dev
 
 # Worker (in separate terminal)
-npm run dev:worker
+pnpm dev:worker
 ```
 
 ## Project Structure
